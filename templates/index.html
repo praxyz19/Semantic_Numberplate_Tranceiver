@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Semantic Licence Plate Communication</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="app-shell">
+        <aside class="sidebar">
+            <div class="brand">
+                <span class="eyebrow">Advanced AI</span>
+                <h1>Semantic Plate Transceiver</h1>
+            </div>
+
+            <form id="uploadForm" class="controls">
+                <div class="control-group">
+                    <label class="control-label">
+                        Input Image
+                    </label>
+                    <div class="file-upload">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent); margin-bottom: 0.5rem;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        <p id="fileNameDisplay">Drop plate image here</p>
+                        <input type="file" id="imageInput" name="image" accept="image/*" required>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label class="control-label">
+                        Channel Quality (SNR)
+                        <span id="snrValue" class="snr-badge">18 dB</span>
+                    </label>
+                    <input type="range" id="snr" name="snr_db" min="-5" max="30" value="18" step="0.5">
+                </div>
+
+                <div class="control-group">
+                    <label class="control-label">
+                        Channel Noise (σ)
+                        <span id="noiseValue" class="snr-badge">0.00</span>
+                    </label>
+                    <input type="range" id="noise" name="channel_noise" min="0" max="1" value="0" step="0.01">
+                </div>
+
+                <button type="submit" class="btn-primary" id="submitBtn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
+                    Run Semantic Transmission
+                </button>
+            </form>
+
+            <div id="metricsPanel" class="metric-box" style="display: none;">
+                <h2 class="eyebrow" style="margin-top: 1rem;">Session Metrics</h2>
+                <div id="metricsList"></div>
+            </div>
+        </aside>
+
+        <main class="workspace">
+            <div class="stages-grid">
+                <!-- 01 Input -->
+                <div class="stage-card">
+                    <div class="stage-header">
+                        <div class="stage-number">01</div>
+                        <h2 class="stage-title">Input Image</h2>
+                    </div>
+                    <div class="viewport">
+                        <img id="inputPreview" src="" alt="">
+                        <p id="inputPlaceholder" style="color: var(--muted); font-size: 0.875rem;">Awaiting input...</p>
+                    </div>
+                    <div class="stage-footer">
+                        <span id="inputMetaSize">Size: -</span>
+                        <span id="inputMetaDim">Dim: -</span>
+                    </div>
+                </div>
+
+                <!-- 02 Deep Semantic Encoding -->
+                <div class="stage-card">
+                    <div class="stage-header">
+                        <div class="stage-number">02</div>
+                        <h2 class="stage-title">Deep Semantic Encoding</h2>
+                    </div>
+                    <div class="viewport">
+                        <img id="platePreview" src="" alt="">
+                    </div>
+                    <div class="stage-footer">
+                        <span id="semanticPayload">Payload: -</span>
+                        <span id="compressionRatio" style="color: var(--success);">Saving: -</span>
+                    </div>
+                </div>
+
+                <!-- 03 Received Semantics -->
+                <div class="stage-card">
+                    <div class="stage-header">
+                        <div class="stage-number">03</div>
+                        <h2 class="stage-title">Received Semantics</h2>
+                    </div>
+                    <div class="viewport">
+                        <img id="receivedPreview" src="" alt="">
+                    </div>
+                    <div class="stage-footer">
+                        <span id="receivedMeta">Map Similarity: -</span>
+                        <span id="characterAccuracy" style="color: var(--accent);">Accuracy: -</span>
+                    </div>
+                </div>
+
+                <!-- 04 Reconstruction -->
+                <div class="stage-card">
+                    <div class="stage-header">
+                        <div class="stage-number">04</div>
+                        <h2 class="stage-title">Receiver Reconstruction</h2>
+                    </div>
+                    <div class="viewport recon-split">
+                        <div class="recon-item">
+                            <span class="recon-label">Plate Reconstruction</span>
+                            <div class="recon-img-frame" style="height: 100px;">
+                                <img id="reconPlate" src="" alt="">
+                            </div>
+                        </div>
+                        <div class="recon-item">
+                            <span class="recon-label">Full Scene Context</span>
+                            <div class="recon-img-frame">
+                                <img id="reconScene" src="" alt="">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="stage-footer">
+                        <span id="reconPsnr">PSNR: -</span>
+                        <span id="reconSsim">SSIM: -</span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="dashboard" class="metrics-dashboard" style="display: none;">
+                <div class="metrics-grid">
+                    <div class="metric-item">
+                        <span class="metric-label">Bandwidth Saved</span>
+                        <span id="metricBandwidth" class="metric-value">-</span>
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-label">Semantic Sim</span>
+                        <span id="metricSemantic" class="metric-value">-</span>
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-label">Image Cosine</span>
+                        <span id="metricCosine" class="metric-value">-</span>
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-label">Char Accuracy</span>
+                        <span id="metricAccuracy" class="metric-value">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flow-strip">
+                <span class="flow-step">Image Input</span>
+                <span class="flow-arrow">→</span>
+                <span class="flow-step">Feature Extraction</span>
+                <span class="flow-arrow">→</span>
+                <span class="flow-step">AWGN Channel</span>
+                <span class="flow-arrow">→</span>
+                <span class="flow-step">Neural Reconstruction</span>
+            </div>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

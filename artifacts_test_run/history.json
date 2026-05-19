@@ -1,0 +1,50 @@
+[
+  {
+    "round": 200,
+    "server_update": 201,
+    "client_id": 3,
+    "client_start_version": 200,
+    "staleness": 200,
+    "alpha": 0.00644,
+    "loss": 1.534892002605412,
+    "text_loss": 1.0751739066757569,
+    "recon_loss": 0.45971809674615727,
+    "steps": 146
+  },
+  {
+    "round": 200,
+    "server_update": 202,
+    "client_id": 1,
+    "client_start_version": 201,
+    "staleness": 201,
+    "alpha": 0.0064,
+    "loss": 1.488847728766186,
+    "text_loss": 1.0293877911819538,
+    "recon_loss": 0.45945994367062204,
+    "steps": 142
+  },
+  {
+    "round": 200,
+    "server_update": 203,
+    "client_id": 0,
+    "client_start_version": 202,
+    "staleness": 202,
+    "alpha": 0.00637,
+    "loss": 1.4696169572102058,
+    "text_loss": 1.0157518183460106,
+    "recon_loss": 0.45386514550930745,
+    "steps": 148
+  },
+  {
+    "round": 200,
+    "server_update": 204,
+    "client_id": 2,
+    "client_start_version": 203,
+    "staleness": 203,
+    "alpha": 0.00634,
+    "loss": 1.5911669059538505,
+    "text_loss": 1.134911425516639,
+    "recon_loss": 0.456255478968083,
+    "steps": 142
+  }
+]

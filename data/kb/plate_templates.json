@@ -1,0 +1,40 @@
+{
+  "templates": [
+    {
+      "template_id": "ind_private_white",
+      "country": "India",
+      "background": [245, 246, 242],
+      "foreground": [15, 23, 42],
+      "border": [20, 20, 20],
+      "aspect_ratio": 4.6,
+      "notes": "Private vehicle style: white plate with dark registration text."
+    },
+    {
+      "template_id": "generic_white",
+      "country": "Generic",
+      "background": [238, 241, 235],
+      "foreground": [20, 28, 36],
+      "border": [31, 41, 55],
+      "aspect_ratio": 4.4,
+      "notes": "Fallback plate template when country-specific semantics are uncertain."
+    },
+    {
+      "template_id": "dark_plate",
+      "country": "Generic",
+      "background": [31, 41, 55],
+      "foreground": [248, 250, 252],
+      "border": [226, 232, 240],
+      "aspect_ratio": 4.4,
+      "notes": "Dark plate template for low-luma plate crops."
+    },
+    {
+      "template_id": "yellow_plate",
+      "country": "Generic",
+      "background": [238, 197, 27],
+      "foreground": [15, 23, 42],
+      "border": [15, 23, 42],
+      "aspect_ratio": 2.0,
+      "notes": "Yellow plate template, useful for two-line commercial-style plates."
+    }
+  ]
+}

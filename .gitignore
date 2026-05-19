@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.venv/
+.vscode/
+data/synthetic_plates/
+data/indian_plate_train/
+artifacts/
+uploads/
+*.png
+*.jpg
+*.jpeg
+*.log
+evaluation_results.json
+quick_eval*.json
