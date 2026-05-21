@@ -6,6 +6,24 @@ import numpy as np
 
 
 PLATE_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ?"
+CONFUSABLES = {
+    "0": "O",
+    "O": "0",
+    "D": "0",
+    "1": "I",
+    "I": "1",
+    "L": "1",
+    "2": "Z",
+    "Z": "2",
+    "5": "S",
+    "S": "5",
+    "6": "G",
+    "G": "6",
+    "8": "B",
+    "B": "8",
+    "M": "N",
+    "N": "M",
+}
 
 
 # ── helpers ────────────────────────────────────────────────────────────
@@ -52,7 +70,7 @@ def transmit_plate_text_awgn(
     if bits.size == 0:
         return [], awgn_report(snr_db, channel_noise, 0.0, 0, 0)
 
-    effective_ebn0_db = float(snr_db) - float(channel_noise) * 45.0
+    effective_ebn0_db = float(snr_db) - float(channel_noise) * 30.0
     ebn0_linear = 10.0 ** (effective_ebn0_db / 10.0)
     noise_variance = 1.0 / (2.0 * max(ebn0_linear, 1e-9))
     tx_signal = bpsk_mod(bits)
@@ -62,10 +80,19 @@ def transmit_plate_text_awgn(
     rx_text = bits_to_plate_text(rx_bits, len(text))
     bit_errors = int(np.sum(bits != rx_bits[: bits.size]))
     ber = bit_errors / max(int(bits.size), 1)
+    theoretical_ber = 0.5 * math.erfc(math.sqrt(max(ebn0_linear, 1e-12)))
+    ui_symbol_flip_prob = max(0.0, min(0.55, (float(channel_noise) - 0.45) * 0.70))
 
     received = []
     symbol_errors = 0
     for idx, (tx_char, rx_char) in enumerate(zip(text, rx_text)):
+        reason = "awgn"
+        if rx_char != tx_char:
+            rx_char = plausible_plate_confusion(tx_char, rx_char, float(channel_noise))
+        elif ui_symbol_flip_prob > 0.0 and np.random.random() < ui_symbol_flip_prob:
+            rx_char = plausible_plate_confusion(tx_char, rx_char, float(channel_noise))
+            reason = "ui_noise"
+
         if tx_char != rx_char:
             symbol_errors += 1
         received.append(
@@ -74,13 +101,30 @@ def transmit_plate_text_awgn(
                 "tx": tx_char,
                 "rx": rx_char,
                 "status": "ok" if tx_char == rx_char else "error",
+                "reason": "clean" if tx_char == rx_char else reason,
             }
         )
 
     return received, awgn_report(
         snr_db, channel_noise, ber, bit_errors, symbol_errors,
-        effective_ebn0_db, int(bits.size),
+        effective_ebn0_db, int(bits.size), noise_variance,
+        theoretical_ber=theoretical_ber, symbol_count=len(text),
     )
+
+
+def plausible_plate_confusion(tx_char: str, raw_rx_char: str, channel_noise: float) -> str:
+    """Prefer realistic ALPR confusions before falling back to unknown marks."""
+    if tx_char in CONFUSABLES:
+        return CONFUSABLES[tx_char]
+    if channel_noise >= 0.9 and np.random.random() < 0.45:
+        return "?"
+    if raw_rx_char in PLATE_ALPHABET[:-1] and raw_rx_char != tx_char:
+        return raw_rx_char
+    if channel_noise >= 0.65 and np.random.random() < 0.25:
+        return "?"
+    alphabet = "0123456789" if tx_char.isdigit() else "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    candidates = [char for char in alphabet if char != tx_char]
+    return candidates[int(np.random.randint(0, len(candidates)))] if candidates else "?"
 
 
 def awgn_report(
@@ -91,20 +135,31 @@ def awgn_report(
     symbol_errors: int,
     effective_ebn0_db: float | None = None,
     bit_count: int = 0,
+    noise_variance: float | None = None,
+    theoretical_ber: float | None = None,
+    symbol_count: int = 0,
 ) -> dict:
     effective = float(snr_db) if effective_ebn0_db is None else effective_ebn0_db
     snr_linear = 10.0 ** (float(snr_db) / 10.0)
     ebn0_linear = 10.0 ** (effective / 10.0)
-    theoretical_ber = 0.5 * math.erfc(math.sqrt(max(ebn0_linear, 1e-12)))
+    theoretical = 0.5 * math.erfc(math.sqrt(max(ebn0_linear, 1e-12))) if theoretical_ber is None else theoretical_ber
+    spectral_efficiency = bit_count / max(symbol_count, 1) if symbol_count else 1.0
+    shannon_min_snr_linear = (2.0 ** spectral_efficiency) - 1.0
     return {
         "mode": "BPSK_AWGN",
         "equation": "y = x + n, n ~ N(0, N0/2)",
+        "capacity_equation": "C/B = log2(1 + SNR)",
+        "ber_equation": "Pb = 0.5 * erfc(sqrt(Eb/N0))",
         "snr_db": round(float(snr_db), 2),
         "channel_noise": round(float(channel_noise), 3),
         "effective_ebn0_db": round(effective, 2),
         "snr_linear": round(snr_linear, 5),
+        "noise_variance": None if noise_variance is None else float(noise_variance),
         "channel_capacity_bps_per_hz": round(math.log2(1.0 + snr_linear), 4),
-        "theoretical_ber_bpsk": theoretical_ber,
+        "spectral_efficiency_bps_per_hz": round(float(spectral_efficiency), 4),
+        "shannon_min_snr_db": round(10.0 * math.log10(max(shannon_min_snr_linear, 1e-12)), 4),
+        "theoretical_ber": theoretical,
+        "theoretical_ber_bpsk": theoretical,
         "measured_ber": round(float(ber), 6),
         "bit_errors": bit_errors,
         "bit_count": bit_count,

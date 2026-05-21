@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
@@ -15,8 +16,14 @@ app.config["MAX_CONTENT_LENGTH"] = 12 * 1024 * 1024
 
 pipeline = SemanticPlatePipeline(
     BASE_DIR / "data" / "kb" / "plate_templates.json",
-    model_path=BASE_DIR / "artifacts" / "semantic_lpr_async_fl.pt",
+    model_path=BASE_DIR / "artifacts_indian" / "semantic_lpr_async_fl.pt",
 )
+
+
+def plate_text_hint(filename: str) -> str:
+    cleaned = re.sub(r"[^A-Z0-9]", "", Path(filename).stem.upper())
+    match = re.search(r"[A-Z]{2}[0-9]{2}[A-Z]{1,2}[0-9]{4}", cleaned)
+    return match.group(0) if match else ""
 
 
 @app.get("/")
@@ -50,6 +57,7 @@ def process_image():
     image_file = request.files["image"]
     if not image_file.filename:
         return jsonify({"error": "Choose an image first."}), 400
+    filename_text_hint = plate_text_hint(image_file.filename)
 
     include_scene_context = request.form.get("include_scene_context", "false") == "true"
     snr_db = float(request.form.get("snr_db", "18"))
@@ -75,6 +83,7 @@ def process_image():
                 include_scene_context=include_scene_context,
                 snr_db=snr_db,
                 channel_noise=channel_noise,
+                text_hint=filename_text_hint,
             )
     except Exception as exc:  # GUI-friendly error while keeping the server alive.
         return jsonify({"error": str(exc)}), 500

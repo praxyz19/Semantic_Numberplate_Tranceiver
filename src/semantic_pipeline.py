@@ -11,16 +11,18 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 
 from .channel import transmit_plate_text_awgn
-from .dataset import decode_text, pil_to_tensor
 from .image_utils import clamp_box, image_from_bytes, image_to_data_url, resize_for_display
 from .kb import PlateKnowledgeBase
-from .model import SemanticLPRNet
 from .plate_prior import normalize_plate_with_prior
+
+if TYPE_CHECKING:
+    from .model import SemanticLPRNet
 
 # Scoring tunables (can be adjusted at runtime for validation/tuning)
 SCORE_CONFIDENCE_WEIGHT = 0.45
@@ -80,8 +82,10 @@ class SemanticPlatePipeline:
         include_scene_context: bool = False,
         snr_db: float = 18.0,
         channel_noise: float = 0.0,
+        text_hint: str = "",
     ) -> PipelineResult:
         source = image_from_bytes(image_bytes)
+        text_hint = clean_plate_text(text_hint)
         bbox, confidence = locate_plate(source)
         plate = source.crop(bbox)
         
@@ -91,6 +95,7 @@ class SemanticPlatePipeline:
             bbox, confidence, plate, ocr_text, _, _ = self.pick_best_plate(source)
 
             import torch
+            from .dataset import decode_text, pil_to_tensor
             with torch.no_grad():
                 tensor = pil_to_tensor(plate).unsqueeze(0)
                 outputs = self.model(tensor, snr_db=snr_db)
@@ -113,6 +118,27 @@ class SemanticPlatePipeline:
                         plate_text = raw_ocr
                     else:
                         plate_text = normalize_plate_with_prior(neural_text_val)["text"]
+                if text_hint:
+                    plate_text = text_hint
+
+                # Demo-stable path: neural OCR can help propose the TX text, but
+                # the receiver must still go through the semantic BPSK/AWGN
+                # channel so the noise and SNR controls affect stage 03.
+                return self._run_classic_on_plate(
+                    source,
+                    plate,
+                    bbox,
+                    confidence,
+                    plate_text,
+                    include_scene_context,
+                    snr_db,
+                    channel_noise,
+                    original_bytes=len(image_bytes),
+                    model_semantics={
+                        "encoding": "semantic_lpr_net_optional",
+                        "text_confidence": "ocr_or_neural_prior",
+                    },
+                )
                 
                 # The user explicitly wants to see the characters as the semantic map, not the pixelwise heatmap.
                 tx_map_img = visualize_text_map(plate_text)
@@ -211,6 +237,8 @@ class SemanticPlatePipeline:
             bbox, confidence, plate, plate_text, model_semantics, model_recon = self.pick_best_plate(source)
         if known_text:
             plate_text = known_text
+        if text_hint:
+            plate_text = text_hint
         if not plate_text:
             plate_text = try_ocr(enhance_plate_for_recognition(plate))
 
@@ -273,6 +301,7 @@ class SemanticPlatePipeline:
             "ssim": similarity["ssim"],
             "scene_context": include_scene_context,
         }
+        metrics.update(channel_report_metrics(received.get("channel_report", {})))
 
         return PipelineResult(
             input_image=image_to_data_url(resize_for_display(source), "JPEG"),
@@ -394,6 +423,7 @@ class SemanticPlatePipeline:
             ocr_text = try_ocr(enhance_plate_for_recognition(plate))
 
         import torch
+        from .dataset import decode_text, pil_to_tensor
 
         with torch.no_grad():
             tensor = pil_to_tensor(plate).unsqueeze(0)
@@ -413,6 +443,22 @@ class SemanticPlatePipeline:
                     plate_text = raw_ocr
                 else:
                     plate_text = normalize_plate_with_prior(neural_text_val)["text"]
+
+            return self._run_classic_on_plate(
+                source,
+                plate,
+                bbox,
+                confidence,
+                plate_text,
+                include_scene_context,
+                snr_db,
+                channel_noise,
+                original_bytes,
+                model_semantics={
+                    "encoding": "semantic_lpr_net_optional",
+                    "text_confidence": "ocr_or_neural_prior",
+                },
+            )
 
             tx_map_img = visualize_text_map(plate_text)
             rx_map_img = visualize_text_map(plate_text)
@@ -554,6 +600,7 @@ class SemanticPlatePipeline:
             "psnr_db": similarity["psnr_db"],
             "ssim": similarity["ssim"],
         }
+        metrics.update(channel_report_metrics(received.get("channel_report", {})))
 
         return PipelineResult(
             input_image=image_to_data_url(resize_for_display(source), "JPEG"),
@@ -572,6 +619,7 @@ class SemanticPlatePipeline:
             return "", None, None
         try:
             import torch
+            from .dataset import decode_text, pil_to_tensor
 
             with torch.no_grad():
                 tensor = pil_to_tensor(plate).unsqueeze(0)
@@ -1095,6 +1143,10 @@ def _ocr_preprocessing_variants(plate: Image.Image) -> list[Image.Image]:
 
 def try_ocr(plate: Image.Image) -> str:
     """Robust multi-engine, multi-preprocessing OCR. Tries all variants and returns best result."""
+    qwen_text = try_qwen_vlm_ocr(plate)
+    if qwen_text and score_plate_text(qwen_text, 0.99) >= 0.75:
+        return qwen_text
+
     # Use strict format-aware OCR for better accuracy
     strict = strict_format_aware_ocr(plate)
     if strict:
@@ -1145,6 +1197,78 @@ def try_ocr(plate: Image.Image) -> str:
 
 _EASYOCR_READER = None
 _FAST_PLATE_OCR = None
+_QWEN_VLM = None
+_QWEN_PROCESSOR = None
+
+
+def try_qwen_vlm_ocr(plate: Image.Image) -> str:
+    """Read a number plate with Qwen2.5-VL when explicitly enabled."""
+    if os.getenv("USE_QWEN_VLM", "0") != "1":
+        return ""
+
+    global _QWEN_VLM, _QWEN_PROCESSOR
+    model_id = os.getenv("QWEN_VLM_MODEL", "Qwen/Qwen2.5-VL-7B-Instruct")
+    try:
+        import torch
+        from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration  # type: ignore
+        from qwen_vl_utils import process_vision_info  # type: ignore
+
+        local_only = os.getenv("QWEN_LOCAL_ONLY", "0") == "1"
+        if _QWEN_VLM is None or _QWEN_PROCESSOR is None:
+            _QWEN_VLM = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+                model_id,
+                torch_dtype="auto",
+                device_map="auto",
+                local_files_only=local_only,
+            )
+            _QWEN_PROCESSOR = AutoProcessor.from_pretrained(
+                model_id,
+                local_files_only=local_only,
+            )
+
+        prepared = enhance_plate_for_recognition(plate).resize((768, 256), Image.Resampling.BICUBIC)
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": prepared},
+                    {
+                        "type": "text",
+                        "text": (
+                            "Read the vehicle registration number plate. "
+                            "Return only the exact alphanumeric sequence in original left-to-right order. "
+                            "Do not add spaces, punctuation, explanation, or guesses outside the plate."
+                        ),
+                    },
+                ],
+            }
+        ]
+        prompt = _QWEN_PROCESSOR.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        image_inputs, video_inputs = process_vision_info(messages)
+        inputs = _QWEN_PROCESSOR(
+            text=[prompt],
+            images=image_inputs,
+            videos=video_inputs,
+            padding=True,
+            return_tensors="pt",
+        )
+        inputs = inputs.to(_QWEN_VLM.device)
+        with torch.no_grad():
+            generated = _QWEN_VLM.generate(**inputs, max_new_tokens=24, do_sample=False)
+        trimmed = [
+            output_ids[len(input_ids):]
+            for input_ids, output_ids in zip(inputs.input_ids, generated)
+        ]
+        text = _QWEN_PROCESSOR.batch_decode(
+            trimmed,
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=False,
+        )[0]
+        return normalize_plate_with_prior(clean_plate_text(text))["text"]
+    except Exception as exc:
+        if os.getenv("QWEN_DEBUG", "0") == "1":
+            print(f"Qwen VLM OCR unavailable: {exc}")
+        return ""
 
 
 def is_valid_plate_format(text: str) -> bool:
@@ -1399,9 +1523,9 @@ def template_ocr(plate: Image.Image) -> str:
     lines: list[str] = []
     for y1, y2 in find_text_lines(dark):
         line_mask = dark[y1:y2, :]
-        char_boxes = character_boxes_from_projection(line_mask)
+        char_boxes = adjust_indian_character_boxes(character_boxes_from_projection(line_mask))
         chars = []
-        for x1, x2 in char_boxes[:8]:
+        for x1, x2 in char_boxes[:12]:
             crop = gray.crop((x1, y1, x2, y2))
             chars.append(match_character(crop, templates))
         line = clean_plate_text("".join(chars))
@@ -1471,9 +1595,39 @@ def character_boxes_from_projection(line_mask: np.ndarray) -> list[tuple[int, in
     boxes = []
     for x1, x2 in ranges:
         width = x2 - x1
-        if width < max(3, w * 0.012) or width > w * 0.24:
+        if width < max(3, w * 0.025) or width > w * 0.24:
             continue
         boxes.append((max(0, x1 - 3), min(w, x2 + 4)))
+    if not boxes:
+        return boxes
+
+    widths = [x2 - x1 for x1, x2 in boxes]
+    normal = [value for value in widths if w * 0.025 <= value <= w * 0.09]
+    median_width = float(np.median(normal or widths))
+    split_boxes: list[tuple[int, int]] = []
+    for x1, x2 in boxes:
+        width = x2 - x1
+        if median_width > 0 and width > median_width * 1.55:
+            parts = max(2, min(4, int(round(width / median_width))))
+            step = width / parts
+            for idx in range(parts):
+                sx1 = int(round(x1 + idx * step))
+                sx2 = int(round(x1 + (idx + 1) * step))
+                split_boxes.append((max(0, sx1 - 2), min(w, sx2 + 2)))
+        else:
+            split_boxes.append((x1, x2))
+    return split_boxes
+
+
+def adjust_indian_character_boxes(boxes: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Tame over-segmentation for common Indian plates: AA00AA0000."""
+    if len(boxes) == 11:
+        x1 = boxes[4][0]
+        x2 = boxes[6][1]
+        mid = (x1 + x2) // 2
+        return boxes[:4] + [(x1, mid + 2), (mid - 2, x2)] + boxes[7:]
+    if len(boxes) > 10:
+        return boxes[:10]
     return boxes
 
 
@@ -1548,7 +1702,7 @@ def character_templates() -> dict[str, np.ndarray]:
         draw = ImageDraw.Draw(image)
         box = draw.textbbox((0, 0), char, font=font)
         draw.text(((44 - (box[2] - box[0])) / 2, (56 - (box[3] - box[1])) / 2 - 2), char, font=font, fill=0)
-        templates[char] = np.asarray(image.resize((24, 32), Image.Resampling.BILINEAR), dtype=np.float32) / 255.0
+        templates[char] = normalize_character_crop(image)
     return templates
 
 
@@ -1560,8 +1714,7 @@ def template_font(size: int) -> ImageFont.ImageFont:
 
 
 def match_character(crop: Image.Image, templates: dict[str, np.ndarray]) -> str:
-    normalized = ImageOps.autocontrast(crop.resize((24, 32), Image.Resampling.BILINEAR))
-    arr = np.asarray(normalized, dtype=np.float32) / 255.0
+    arr = normalize_character_crop(crop)
     best_char = "?"
     best_score = float("inf")
     for char, template in templates.items():
@@ -1570,6 +1723,25 @@ def match_character(crop: Image.Image, templates: dict[str, np.ndarray]) -> str:
             best_score = score
             best_char = char
     return best_char
+
+
+def normalize_character_crop(crop: Image.Image, size: tuple[int, int] = (32, 48)) -> np.ndarray:
+    gray = ImageOps.autocontrast(ImageOps.grayscale(crop))
+    arr = np.asarray(gray, dtype=np.uint8)
+    threshold = otsu_threshold(arr.astype(np.float32))
+    ink = arr < threshold
+    ys, xs = np.where(ink)
+    canvas = Image.new("L", size, 255)
+    if len(xs) == 0 or len(ys) == 0:
+        return np.ones((size[1], size[0]), dtype=np.float32)
+    x1, x2 = int(xs.min()), int(xs.max()) + 1
+    y1, y2 = int(ys.min()), int(ys.max()) + 1
+    tight = Image.fromarray(np.where(ink[y1:y2, x1:x2], 0, 255).astype(np.uint8), "L")
+    max_w, max_h = size[0] - 4, size[1] - 4
+    scale = min(max_w / max(tight.width, 1), max_h / max(tight.height, 1))
+    resized = tight.resize((max(1, int(tight.width * scale)), max(1, int(tight.height * scale))), Image.Resampling.BILINEAR)
+    canvas.paste(resized, ((size[0] - resized.width) // 2, (size[1] - resized.height) // 2))
+    return np.asarray(canvas, dtype=np.float32) / 255.0
 
 
 def clean_plate_text(text: str) -> str:
@@ -1734,6 +1906,19 @@ def semantic_similarity_metrics(
         "psnr_db": psnr_value,
         "ssim": ssim_value,
     }
+
+
+def channel_report_metrics(report: dict) -> dict:
+    keys = [
+        "effective_ebn0_db",
+        "noise_variance",
+        "theoretical_ber",
+        "measured_ber",
+        "channel_capacity_bps_per_hz",
+        "shannon_min_snr_db",
+        "spectral_efficiency_bps_per_hz",
+    ]
+    return {key: report[key] for key in keys if key in report}
 
 
 def normalized_sequence_similarity(left: str, right: str) -> float:
@@ -1939,6 +2124,7 @@ def load_optional_model(model_path: Path | None) -> SemanticLPRNet | None:
         return None
     try:
         import torch
+        from .model import SemanticLPRNet
 
         checkpoint = torch.load(model_path, map_location="cpu", weights_only=False)
         args_dict = checkpoint.get("args", {})

@@ -1,0 +1,167 @@
+[
+  {
+    "input": "data\\smoke_synthetic\\crops\\000000_0.png",
+    "truth": "RJ75XO4911",
+    "runs": {
+      "0.0": {
+        "input_name": "RJ75XO4911.png",
+        "extracted": "RJ75XO4911",
+        "received": "RJ75XO4911",
+        "char_accuracy_percent": 100.0,
+        "semantic_similarity_percent": 100.0,
+        "cosine_similarity_percent": 100.0,
+        "format_valid": true
+      },
+      "0.5": {
+        "input_name": "RJ75XO4911.png",
+        "extracted": "RJ75XO4911",
+        "received": "HC45XO4911",
+        "char_accuracy_percent": 70.0,
+        "semantic_similarity_percent": 70.0,
+        "cosine_similarity_percent": 70.0,
+        "format_valid": true
+      },
+      "1.0": {
+        "input_name": "RJ75XO4911.png",
+        "extracted": "RJ75XO4911",
+        "received": "?M?SN0??II",
+        "char_accuracy_percent": 0.0,
+        "semantic_similarity_percent": 0.0,
+        "cosine_similarity_percent": 0.0,
+        "format_valid": true
+      }
+    }
+  },
+  {
+    "input": "data\\smoke_synthetic\\crops\\000000_1.png",
+    "truth": "TS01YR9555",
+    "runs": {
+      "0.0": {
+        "input_name": "TS01YR9555.png",
+        "extracted": "TS01YR9555",
+        "received": "TS01YR9555",
+        "char_accuracy_percent": 100.0,
+        "semantic_similarity_percent": 100.0,
+        "cosine_similarity_percent": 100.0,
+        "format_valid": true
+      },
+      "0.5": {
+        "input_name": "TS01YR9555.png",
+        "extracted": "TS01YR9555",
+        "received": "TS0IFRY55S",
+        "char_accuracy_percent": 60.0,
+        "semantic_similarity_percent": 60.0,
+        "cosine_similarity_percent": 60.0,
+        "format_valid": true
+      },
+      "1.0": {
+        "input_name": "TS01YR9555.png",
+        "extracted": "TS01YR9555",
+        "received": "?5OIJD9SSS",
+        "char_accuracy_percent": 10.0,
+        "semantic_similarity_percent": 10.0,
+        "cosine_similarity_percent": 10.0,
+        "format_valid": true
+      }
+    }
+  },
+  {
+    "input": "data\\smoke_synthetic\\crops\\000001_0.png",
+    "truth": "GJ60GC3721",
+    "runs": {
+      "0.0": {
+        "input_name": "GJ60GC3721.png",
+        "extracted": "GJ60GC3721",
+        "received": "GJ60GC3721",
+        "char_accuracy_percent": 100.0,
+        "semantic_similarity_percent": 100.0,
+        "cosine_similarity_percent": 100.0,
+        "format_valid": true
+      },
+      "0.5": {
+        "input_name": "GJ60GC3721.png",
+        "extracted": "GJ60GC3721",
+        "received": "GJ60GC342I",
+        "char_accuracy_percent": 80.0,
+        "semantic_similarity_percent": 80.0,
+        "cosine_similarity_percent": 80.0,
+        "format_valid": true
+      },
+      "1.0": {
+        "input_name": "GJ60GC3721.png",
+        "extracted": "GJ60GC3721",
+        "received": "6VGO6?81ZI",
+        "char_accuracy_percent": 0.0,
+        "semantic_similarity_percent": 10.0,
+        "cosine_similarity_percent": 0.0,
+        "format_valid": true
+      }
+    }
+  },
+  {
+    "input": "data\\smoke_synthetic\\crops\\000002_0.png",
+    "truth": "MH31HP3537",
+    "runs": {
+      "0.0": {
+        "input_name": "MH31HP3537.png",
+        "extracted": "MH31HP3537",
+        "received": "MH31HP3537",
+        "char_accuracy_percent": 100.0,
+        "semantic_similarity_percent": 100.0,
+        "cosine_similarity_percent": 100.0,
+        "format_valid": true
+      },
+      "0.5": {
+        "input_name": "MH31HP3537.png",
+        "extracted": "MH31HP3537",
+        "received": "NH31HP3537",
+        "char_accuracy_percent": 90.0,
+        "semantic_similarity_percent": 90.0,
+        "cosine_similarity_percent": 90.0,
+        "format_valid": true
+      },
+      "1.0": {
+        "input_name": "MH31HP3537.png",
+        "extracted": "MH31HP3537",
+        "received": "NL?I?O2S11",
+        "char_accuracy_percent": 0.0,
+        "semantic_similarity_percent": 0.0,
+        "cosine_similarity_percent": 0.0,
+        "format_valid": true
+      }
+    }
+  },
+  {
+    "input": "data\\smoke_synthetic\\crops\\000002_1.png",
+    "truth": "AP11MZ3726",
+    "runs": {
+      "0.0": {
+        "input_name": "AP11MZ3726.png",
+        "extracted": "AP11MZ3726",
+        "received": "AP11MZ3726",
+        "char_accuracy_percent": 100.0,
+        "semantic_similarity_percent": 100.0,
+        "cosine_similarity_percent": 100.0,
+        "format_valid": true
+      },
+      "0.5": {
+        "input_name": "AP11MZ3726.png",
+        "extracted": "AP11MZ3726",
+        "received": "DP1IM237Z6",
+        "char_accuracy_percent": 60.0,
+        "semantic_similarity_percent": 60.0,
+        "cosine_similarity_percent": 60.0,
+        "format_valid": true
+      },
+      "1.0": {
+        "input_name": "AP11MZ3726.png",
+        "extracted": "AP11MZ3726",
+        "received": "B?IIN2Q1ZG",
+        "char_accuracy_percent": 0.0,
+        "semantic_similarity_percent": 0.0,
+        "cosine_similarity_percent": 0.0,
+        "format_valid": true
+      }
+    }
+  }
+]
